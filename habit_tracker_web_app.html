@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>31-Day Habit Tracker</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --muted: #94a3b8;
+      --text: #e5e7eb;
+      --accent: #38bdf8;
+      --ok: #22c55e;
+      --grid: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: linear-gradient(180deg, #020617, #0b1220);
+      color: var(--text);
+    }
+    .wrap { max-width: 1200px; margin: 24px auto; padding: 16px; }
+    .card {
+      background: rgba(17,24,39,.9);
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      margin-bottom: 16px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.4rem; }
+    .sub { color: var(--muted); margin-bottom: 12px; }
+    .controls { display:flex; gap:8px; flex-wrap: wrap; align-items:center; }
+    input[type="text"] {
+      background:#0b1220; color:var(--text); border:1px solid #334155; border-radius:10px; padding:8px 10px;
+    }
+    button {
+      background: #0ea5e9; color:white; border:none; border-radius:10px; padding:8px 12px; cursor:pointer; font-weight:600;
+    }
+    button.secondary { background:#1f2937; }
+    .table-wrap { overflow:auto; border:1px solid #1f2937; border-radius: 12px; }
+    table { width:100%; border-collapse: collapse; min-width: 980px; }
+    th, td { border:1px solid var(--grid); text-align:center; padding:6px; font-size:12px; }
+    th.sticky, td.sticky { position: sticky; left: 0; background: #0b1220; z-index: 2; text-align:left; min-width: 180px; }
+    thead th { position: sticky; top: 0; background:#0b1220; z-index: 1; }
+    .check { width:18px; height:18px; accent-color: var(--ok); }
+    .habit-name { width: 100%; background: transparent; border: none; color: var(--text); }
+    .habit-name:focus { outline: 1px solid var(--accent); border-radius: 6px; }
+    .footer { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; color:var(--muted); font-size: 13px; margin-top:10px; }
+    .pill { background:#0b1220; border:1px solid #334155; border-radius:999px; padding:4px 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Getting 1% Better Each Day — 31 Day Habit Tracker</h1>
+      <div class="sub">Editable, auto-saving (LocalStorage), mobile-friendly.</div>
+      <div class="controls">
+        <label>Month: <input id="month" type="text" placeholder="e.g. March 2026"></label>
+        <button id="addHabit">+ Add Habit</button>
+        <button id="reset" class="secondary">Reset All</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table id="tracker"></table>
+      </div>
+      <div class="footer">
+        <span class="pill">Total checks: <strong id="totalChecks">0</strong></span>
+        <span class="pill">Completion: <strong id="completion">0%</strong></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+const DAYS = 31;
+const STORAGE_KEY = 'habit_tracker_v1';
+
+const defaultHabits = [
+  'Workout','Reading','Meditation','Water (3L)','No Sugar','Coding','Sleep 7+ hrs'
+];
+
+function loadState(){
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null; } catch { return null; }
+}
+function saveState(state){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function createInitial(){
+  return {
+    month: '',
+    habits: defaultHabits.map(name => ({ name, checks: Array(DAYS).fill(false) }))
+  };
+}
+
+let state = loadState() || createInitial();
+
+const table = document.getElementById('tracker');
+const monthInput = document.getElementById('month');
+const totalChecksEl = document.getElementById('totalChecks');
+const completionEl = document.getElementById('completion');
+
+function render(){
+  monthInput.value = state.month || '';
+  let html = '<thead><tr><th class="sticky">Habits / Protocols</th>';
+  for(let d=1; d<=DAYS; d++) html += `<th>${d}</th>`;
+  html += '</tr></thead><tbody>';
+
+  state.habits.forEach((h, i) => {
+    html += `<tr><td class="sticky"><input class="habit-name" data-habit-name="${i}" value="${escapeHtml(h.name)}"></td>`;
+    for(let d=0; d<DAYS; d++){
+      const checked = h.checks[d] ? 'checked' : '';
+      html += `<td><input class="check" type="checkbox" data-h="${i}" data-d="${d}" ${checked}></td>`;
+    }
+    html += '</tr>';
+  });
+
+  html += '</tbody>';
+  table.innerHTML = html;
+  bindEvents();
+  updateStats();
+}
+
+function updateStats(){
+  const total = state.habits.reduce((acc, h) => acc + h.checks.filter(Boolean).length, 0);
+  const possible = state.habits.length * DAYS || 1;
+  const pct = Math.round((total/possible)*100);
+  totalChecksEl.textContent = total;
+  completionEl.textContent = pct + '%';
+}
+
+function bindEvents(){
+  table.querySelectorAll('input.check').forEach(el => {
+    el.addEventListener('change', e => {
+      const h = +e.target.dataset.h;
+      const d = +e.target.dataset.d;
+      state.habits[h].checks[d] = e.target.checked;
+      saveState(state);
+      updateStats();
+    });
+  });
+  table.querySelectorAll('input.habit-name').forEach(el => {
+    el.addEventListener('input', e => {
+      const i = +e.target.dataset.habitName;
+      state.habits[i].name = e.target.value;
+      saveState(state);
+    });
+  });
+}
+
+function escapeHtml(str){
+  return str.replace(/[&<>\"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[s]));
+}
+
+document.getElementById('addHabit').addEventListener('click', () => {
+  state.habits.push({ name: 'New Habit', checks: Array(DAYS).fill(false) });
+  saveState(state);
+  render();
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  if(!confirm('Reset all data? This cannot be undone.')) return;
+  state = createInitial();
+  saveState(state);
+  render();
+});
+
+monthInput.addEventListener('input', e => {
+  state.month = e.target.value;
+  saveState(state);
+});
+
+render();
+</script>
+</body>
+</html>
